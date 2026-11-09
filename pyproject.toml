@@ -1,0 +1,23 @@
+[project]
+name = "ir"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+  { name = "ProfiiDev", email = "92174452+Profiidev@users.noreply.github.com" },
+  { name = "NotCybot", email = "141260979+NotCybot@users.noreply.github.com" },
+  { name = "jojowaldi", email = "150332087+jojowaldi@users.noreply.github.com" },
+  { name = "TheFireCircle", email = "18245586+TheFireCircle@users.noreply.github.com" },
+]
+requires-python = ">=3.13"
+dependencies = ["matplotlib>=3.11.2", "numpy>=2.5.4"]
+
+[project.scripts]
+ir = "ir:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["ipykernel>=7.4.0"]
