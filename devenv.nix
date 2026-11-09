@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 {
   languages.python = {
@@ -9,7 +9,10 @@
     libraries = [
       pkgs.stdenv.cc.cc.lib
       pkgs.zlib
-      # matplotlib dlopens these to detect a display; without them it falls back to Agg.
+    ]
+    # matplotlib dlopens these to detect a display; without them it falls back to Agg.
+    # Linux only: wayland does not build on darwin.
+    ++ lib.optionals pkgs.stdenv.isLinux [
       pkgs.libx11
       pkgs.wayland
     ];
