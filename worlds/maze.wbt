@@ -1,0 +1,174 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
+
+WorldInfo {
+  info [
+    "IR Maze Escape: 5x5 maze, 0.4 m cells, exit gap on the east wall (bottom-right)."
+  ]
+  title "Maze Escape"
+}
+Viewpoint {
+  orientation -0.5773 0.5773 0.5773 2.0944
+  position 0 0 4.2
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 3 3
+}
+SolidBox {
+  translation 0 1 0.05
+  name "wall 1"
+  size 2.02 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation -0.4 0.6 0.05
+  name "wall 2"
+  size 0.42 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0.6 0.6 0.05
+  name "wall 3"
+  size 0.82 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation -0.8 0.2 0.05
+  name "wall 4"
+  size 0.42 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0.4 0.2 0.05
+  name "wall 5"
+  size 0.42 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0 -0.2 0.05
+  name "wall 6"
+  size 0.42 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0 -0.6 0.05
+  name "wall 7"
+  size 1.22 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0 -1 0.05
+  name "wall 8"
+  size 2.02 0.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation -1 0 0.05
+  name "wall 9"
+  size 0.02 2.02 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation -0.6 0.8 0.05
+  name "wall 10"
+  size 0.02 0.42 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation -0.6 -0.2 0.05
+  name "wall 11"
+  size 0.02 0.82 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation -0.2 0.2 0.05
+  name "wall 12"
+  size 0.02 0.82 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0.2 0 0.05
+  name "wall 13"
+  size 0.02 0.42 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 0.6 -0.4 0.05
+  name "wall 14"
+  size 0.02 0.42 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
+SolidBox {
+  translation 1 0.2 0.05
+  name "wall 15"
+  size 0.02 1.62 0.1
+  appearance PBRAppearance {
+    baseColor 0.8 0.8 0.8
+    roughness 1
+    metalness 0
+  }
+}
