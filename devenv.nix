@@ -12,7 +12,7 @@
     ]
     # matplotlib dlopens these to detect a display; without them it falls back to Agg.
     # Linux only: wayland does not build on darwin.
-    ++ lib.optionals pkgs.stdenv.isLinux [
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
       pkgs.libx11
       pkgs.wayland
     ];
