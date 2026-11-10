@@ -257,7 +257,7 @@ def axis_angle(phi, beta):
 
 class World:
     def __init__(self, rng):
-        self.rng, self.out, self.n = rng, [], 0
+        self.rng, self.out, self.n, self.solids = rng, [], 0, []
 
     def box(self, pos, size, tex, rot=None, solid=True, glow=False):
         self.n += 1
@@ -271,6 +271,8 @@ class World:
                 + (f"emissiveColorMap {img} " if glow else "")
                 + f"textureTransform TextureTransform {{ scale {t:.3g} {t:.3g} }} roughness 1 metalness 0 }}"
             )
+        if solid and not rot:
+            self.solids.append((pos, size))
         r = f"  rotation {rot[0]:.5f} {rot[1]:.5f} {rot[2]:.5f} {rot[3]:.5f}\n" if rot else ""
         self.out.append(
             f'SolidBox {{\n  translation {pos[0]:.4f} {pos[1]:.4f} {pos[2]:.4f}\n{r}  name "{tex} {self.n}"\n'
@@ -411,22 +413,78 @@ def write_world(m, path):
             else:
                 w.box(pos, size, w.wall_tex() if tex == "stone_bricks" else tex)
 
+    start = block_xyz(next(r for r in m.rooms if r.kind == "entrance"), "start")
+    goal = block_xyz(next(r for r in m.rooms if r.kind == "portal"), "goal")
+    route = plan(w.solids, start, goal)
+    heading = math.atan2(route[1][1] - start[1], route[1][0] - start[0])
     head = HEADER.read_text().split("WorldInfo")[0]
+    head = head.replace("EXTERNPROTO", 'EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"\nEXTERNPROTO', 1)
     info = f"IR Maze Escape: Minecraft stronghold, seed {m.seed}, {steps(m.path)} steps start to portal, {m.loops} loops."
     head += (
         f'WorldInfo {{\n  info [\n    "{info}"\n  ]\n  title "Stronghold Escape"\n}}\n'
-        f"Viewpoint {{\n  orientation -0.5773 0.5773 0.5773 2.0944\n  position 0 0 {W * P * 1.3:.1f}\n}}\n"
+        f"Viewpoint {{\n  orientation -0.5773 0.5773 0.5773 2.0944\n  position {start[0]} {start[1]} 1\n"
+        '  follow "e-puck"\n  followType "Tracking Shot"\n}\n'
         "TexturedBackground {\n}\nTexturedBackgroundLight {\n}\n"
         f"Floor {{\n  translation 0 0 -0.3\n  size {W * P * 2:.0f} {W * P * 2:.0f}\n}}\n"
     )
-    Path(path).write_text(head + "".join(w.out))
+    robot = (
+        f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  rotation 0 0 1 {heading:.4f}\n"
+        f'  controller "maze_solver"\n  customData {json.dumps(json.dumps(route))}\n'
+        "  turretSlot [\n    GPS {\n    }\n    Compass {\n    }\n  ]\n}\n"
+    )
+    Path(path).write_text(head + "".join(w.out) + robot)
     Path(path).with_suffix(".json").write_text(json.dumps({
         "seed": m.seed,
-        "start": block_xyz(next(r for r in m.rooms if r.kind == "entrance"), "start"),
-        "goal": block_xyz(next(r for r in m.rooms if r.kind == "portal"), "goal"),
+        "start": start,
+        "goal": goal,
         "steps": steps(m.path),
         "loops": m.loops,
+        "route": route,
     }, indent=2))
+
+
+def plan(solids, start, goal):
+    """Waypoints (x, y) from start to goal on the 0.1 m block grid, avoiding everything the robot (0..0.06 m) can touch."""
+    n = W * 4 + 1
+    gx, gy = cx(0) - T / 2, cy(0) - T / 2
+    wall = np.zeros((n, n), bool)
+    for pos, size in solids:
+        if pos[2] - size[2] / 2 < 0.06 and pos[2] + size[2] / 2 > 0.005:
+            i0, i1 = (math.floor((pos[0] - size[0] / 2 - gx) / BLOCK + 1e-3), math.ceil((pos[0] + size[0] / 2 - gx) / BLOCK - 1e-3))
+            j0, j1 = (math.floor((pos[1] - size[1] / 2 - gy) / BLOCK + 1e-3), math.ceil((pos[1] + size[1] / 2 - gy) / BLOCK - 1e-3))
+            wall[i0:i1, j0:j1] = True
+    near = np.zeros_like(wall)
+    for di in (-1, 0, 1):
+        for dj in (-1, 0, 1):
+            near |= np.roll(np.roll(wall, di, 0), dj, 1)
+    cell = lambda p: (int((p[0] - gx) // BLOCK), int((p[1] - gy) // BLOCK))
+    src, dst = cell(start), cell(goal)
+    best, prev, q = {(src, None): 0}, {}, [(0, src, None)]
+    while q:
+        d, c, k = heapq.heappop(q)
+        if c == dst:
+            break
+        if d > best[(c, k)]:
+            continue
+        for k2, (di, dj) in enumerate(DIRS):
+            nc = (c[0] + di, c[1] + dj)
+            if 0 <= nc[0] < n and 0 <= nc[1] < n and not wall[nc]:
+                nd = d + 1 + 2 * near[nc] + (0.6 if k is not None and k != k2 else 0)
+                if nd < best.get((nc, k2), 1e9):
+                    best[(nc, k2)], prev[(nc, k2)] = nd, (c, k)
+                    heapq.heappush(q, (nd, nc, k2))
+    else:
+        raise RuntimeError("no robot route start -> portal")
+    key = min((kk for kk in best if kk[0] == dst), key=best.get)
+    cells = []
+    while key in prev or key[0] == src:
+        cells.append(key)
+        if key not in prev:
+            break
+        key = prev[key]
+    cells = cells[::-1]
+    pts = [cells[0]] + [b for a, b, c in zip(cells, cells[1:], cells[2:]) if b[1] != c[1]] + [cells[-1]]
+    return [[round(gx + (c[0][0] + 0.5) * BLOCK, 3), round(gy + (c[0][1] + 0.5) * BLOCK, 3)] for c in pts]
 
 
 def extract_textures(out_dir, jar=JAR):
