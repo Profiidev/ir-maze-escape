@@ -18,7 +18,7 @@ class Piece:
         self.I, self.J = 4 * nx - 1, 4 * ny - 1
 
     def box(self, x0, z0, x1, z1, y0, y1, tex, slab=False, mode=""):
-        if not self.tall:
+        if not self.tall and mode != "beacon":
             y1 = min(y1, 3)
         if y0 > y1:
             return
@@ -49,8 +49,8 @@ class Piece:
                 for k in range(4):  # rods
                     o = 0.25 * k + 0.0625
                     out.append((i + o, j + 0.4375, t, t, y0 - 1, h, "bars", "") if along_x else (i + 0.4375, j + o, t, t, y0 - 1, h, "bars", ""))
-                for yy in (y0 - 1, y1 - t):  # rails
-                    out.append((i, j + 0.4375, 1, t, yy, t, "bars", "") if along_x else (i + 0.4375, j, t, 1, yy, t, "bars", ""))
+                for yy, rh in ((y0 - 1, 0.4), (y1 - t, t)):  # rails; the low one is robot-sensor height
+                    out.append((i, j + 0.4375, 1, t, yy, rh, "bars", "") if along_x else (i + 0.4375, j, t, 1, yy, rh, "bars", ""))
         return out
 
     def rotated(self, r):
@@ -163,6 +163,7 @@ def portal(rng):
     p.box(4, 9, 6, 11, 1, 2, "lava", mode="lava")
     for x, z in [(4, 8), (5, 8), (6, 8), (4, 12), (5, 12), (6, 12), (3, 9), (3, 10), (3, 11), (7, 9), (7, 10), (7, 11)]:
         p.box(x, z, x, z, 3, 3, "frame", mode="frame")
+    p.box(5, 10, 5, 10, 4, 9, "beacon", mode="beacon")  # glow column above the portal (the robot's camera target)
     p.box(4, 9, 6, 11, 3, 3, "portal", slab=True, mode="portal")  # all 12 eyes set: portal active
     for stone, lava, side in [((2, 1, 2, 4), 1, 1), ((8, 1, 8, 4), 9, 9)]:
         p.box(*stone, 1, 1, "stone_bricks")

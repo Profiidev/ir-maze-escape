@@ -257,13 +257,15 @@ def axis_angle(phi, beta):
 
 class World:
     def __init__(self, rng):
-        self.rng, self.out, self.n, self.solids = rng, [], 0, []
+        self.rng, self.out, self.n = rng, [], 0
 
     def box(self, pos, size, tex, rot=None, solid=True, glow=False):
         self.n += 1
         t = max(size) / 0.1  # SolidBox UV is metric: one tile per MC block
         img = f'ImageTexture {{ url ["textures/{tex}.png"] filtering 0 }}'
-        if tex == "bars":
+        if tex == "beacon":
+            app = "PBRAppearance { baseColor 0.1 1 0.4 emissiveColor 0.1 1 0.4 roughness 1 metalness 0 }"
+        elif tex == "bars":
             app = "PBRAppearance { baseColor 0.55 0.55 0.58 roughness 0.4 metalness 0.8 }"
         else:
             app = (
@@ -271,8 +273,6 @@ class World:
                 + (f"emissiveColorMap {img} " if glow else "")
                 + f"textureTransform TextureTransform {{ scale {t:.3g} {t:.3g} }} roughness 1 metalness 0 }}"
             )
-        if solid and not rot:
-            self.solids.append((pos, size))
         r = f"  rotation {rot[0]:.5f} {rot[1]:.5f} {rot[2]:.5f} {rot[3]:.5f}\n" if rot else ""
         self.out.append(
             f'SolidBox {{\n  translation {pos[0]:.4f} {pos[1]:.4f} {pos[2]:.4f}\n{r}  name "{tex} {self.n}"\n'
@@ -408,6 +408,8 @@ def write_world(m, path):
                 w.box((pos[0], pos[1], zl + y0 * BLOCK + body / 2), (BLOCK, BLOCK, body), "end_portal_frame_side")
                 w.box((pos[0], pos[1], zl + y0 * BLOCK + body + 0.00075), (BLOCK, BLOCK, 0.0015), "end_portal_frame_top")
                 w.box((pos[0], pos[1], zl + y0 * BLOCK + body + 0.0015 + 3 / 32 * BLOCK), (BLOCK / 2, BLOCK / 2, 3 / 16 * BLOCK), "end_portal_frame_eye")
+            elif mode == "beacon":
+                w.box(pos, size, "beacon", solid=False)
             elif mode == "lava":
                 w.box(pos, size, "lava", glow=True)
             else:
@@ -415,8 +417,6 @@ def write_world(m, path):
 
     start = block_xyz(next(r for r in m.rooms if r.kind == "entrance"), "start")
     goal = block_xyz(next(r for r in m.rooms if r.kind == "portal"), "goal")
-    route = plan(w.solids, start, goal)
-    heading = math.atan2(route[1][1] - start[1], route[1][0] - start[0])
     head = HEADER.read_text().split("WorldInfo")[0]
     head = head.replace("EXTERNPROTO", 'EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"\nEXTERNPROTO', 1)
     info = f"IR Maze Escape: Minecraft stronghold, seed {m.seed}, {steps(m.path)} steps start to portal, {m.loops} loops."
@@ -427,10 +427,20 @@ def write_world(m, path):
         "TexturedBackground {\n}\nTexturedBackgroundLight {\n}\n"
         f"Floor {{\n  translation 0 0 -0.3\n  size {W * P * 2:.0f} {W * P * 2:.0f}\n}}\n"
     )
+    # sensors only: compass, wheel encoders, camera (tilted up to see the portal beacon) and 4 x 3 parallel range rays
+    rays = ""
+    for k in range(4):
+        a = k * math.pi / 2
+        for j, off in enumerate((0, -0.04, 0.04)):
+            x, y = 0.03 * math.cos(a) - off * math.sin(a), 0.03 * math.sin(a) + off * math.cos(a)
+            rays += (
+                f'    DistanceSensor {{\n      name "d{k}_{j}"\n      translation {x:.4f} {y:.4f} 0.03\n'
+                f"      rotation 0 0 1 {a:.5f}\n      lookupTable [0 0 0, 0.8 0.8 0]\n    }}\n"
+            )
     robot = (
-        f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  rotation 0 0 1 {heading:.4f}\n"
-        f'  controller "maze_solver"\n  customData {json.dumps(json.dumps(route))}\n'
-        "  turretSlot [\n    GPS {\n    }\n    Compass {\n    }\n  ]\n}\n"
+        f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  controller \"maze_solver\"\n  version \"2\"\n"
+        "  camera_width 104\n  camera_height 80\n  camera_fieldOfView 1.2\n  camera_rotation 0 1 0 -0.45\n"
+        f"  turretSlot [\n    Compass {{\n    }}\n{rays}  ]\n}}\n"
     )
     Path(path).write_text(head + "".join(w.out) + robot)
     Path(path).with_suffix(".json").write_text(json.dumps({
@@ -439,52 +449,7 @@ def write_world(m, path):
         "goal": goal,
         "steps": steps(m.path),
         "loops": m.loops,
-        "route": route,
     }, indent=2))
-
-
-def plan(solids, start, goal):
-    """Waypoints (x, y) from start to goal on the 0.1 m block grid, avoiding everything the robot (0..0.06 m) can touch."""
-    n = W * 4 + 1
-    gx, gy = cx(0) - T / 2, cy(0) - T / 2
-    wall = np.zeros((n, n), bool)
-    for pos, size in solids:
-        if pos[2] - size[2] / 2 < 0.06 and pos[2] + size[2] / 2 > 0.005:
-            i0, i1 = (math.floor((pos[0] - size[0] / 2 - gx) / BLOCK + 1e-3), math.ceil((pos[0] + size[0] / 2 - gx) / BLOCK - 1e-3))
-            j0, j1 = (math.floor((pos[1] - size[1] / 2 - gy) / BLOCK + 1e-3), math.ceil((pos[1] + size[1] / 2 - gy) / BLOCK - 1e-3))
-            wall[i0:i1, j0:j1] = True
-    near = np.zeros_like(wall)
-    for di in (-1, 0, 1):
-        for dj in (-1, 0, 1):
-            near |= np.roll(np.roll(wall, di, 0), dj, 1)
-    cell = lambda p: (int((p[0] - gx) // BLOCK), int((p[1] - gy) // BLOCK))
-    src, dst = cell(start), cell(goal)
-    best, prev, q = {(src, None): 0}, {}, [(0, src, None)]
-    while q:
-        d, c, k = heapq.heappop(q)
-        if c == dst:
-            break
-        if d > best[(c, k)]:
-            continue
-        for k2, (di, dj) in enumerate(DIRS):
-            nc = (c[0] + di, c[1] + dj)
-            if 0 <= nc[0] < n and 0 <= nc[1] < n and not wall[nc]:
-                nd = d + 1 + 2 * near[nc] + (0.6 if k is not None and k != k2 else 0)
-                if nd < best.get((nc, k2), 1e9):
-                    best[(nc, k2)], prev[(nc, k2)] = nd, (c, k)
-                    heapq.heappush(q, (nd, nc, k2))
-    else:
-        raise RuntimeError("no robot route start -> portal")
-    key = min((kk for kk in best if kk[0] == dst), key=best.get)
-    cells = []
-    while key in prev or key[0] == src:
-        cells.append(key)
-        if key not in prev:
-            break
-        key = prev[key]
-    cells = cells[::-1]
-    pts = [cells[0]] + [b for a, b, c in zip(cells, cells[1:], cells[2:]) if b[1] != c[1]] + [cells[-1]]
-    return [[round(gx + (c[0][0] + 0.5) * BLOCK, 3), round(gy + (c[0][1] + 0.5) * BLOCK, 3)] for c in pts]
 
 
 def extract_textures(out_dir, jar=JAR):
