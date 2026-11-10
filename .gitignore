@@ -175,5 +175,4 @@ poetry.toml
 .direnv
 
 /protos
-worlds/textures/
 worlds/.*.wbproj
