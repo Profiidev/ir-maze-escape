@@ -1,5 +1,6 @@
 #VRML_SIM R2025a utf8
 
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
@@ -13,7 +14,9 @@ WorldInfo {
 }
 Viewpoint {
   orientation -0.5773 0.5773 0.5773 2.0944
-  position 0 0 15.6
+  position 1.8 -0.6 1
+  follow "e-puck"
+  followType "Tracking Shot"
 }
 TexturedBackground {
 }
@@ -9885,4 +9888,16 @@ SolidBox {
   size 0.1000 0.1000 0.1000
   appearance PBRAppearance { baseColorMap ImageTexture { url ["textures/oak_planks.png"] filtering 0 } textureTransform TextureTransform { scale 1 1 } roughness 1 metalness 0 }
   enableBoundingObject TRUE
+}
+E-puck {
+  translation 1.8 -0.6 0
+  rotation 0 0 1 0.0000
+  controller "maze_solver"
+  customData "[[1.8, -0.6], [3.4, -0.6], [3.4, 1.0], [4.2, 1.0], [4.2, 0.6], [3.8, 0.6], [3.8, -0.6], [4.6, -0.6], [4.6, -0.2], [4.2, -0.2], [4.2, 0.2], [5.0, 0.2], [5.0, 1.0], [5.8, 1.0], [5.8, 5.8], [5.4, 5.8], [5.4, 4.6], [4.6, 4.6], [4.6, 5.8], [1.0, 5.8], [1.0, 5.0], [2.6, 5.0], [2.6, 5.4], [3.0, 5.4], [3.0, 5.0], [3.5, 5.0], [3.5, 4.6], [3.8, 4.6], [3.8, 3.4], [3.4, 3.4], [3.4, 4.2], [3.0, 4.2], [3.0, 4.6], [2.6, 4.6], [2.6, 3.8], [-1.0, 3.8], [-1.0, 2.6], [-1.4, 2.6], [-1.4, 5.0], [-1.0, 5.0], [-1.0, 5.8], [-1.4, 5.8], [-1.4, 5.4], [-1.8, 5.4], [-1.8, 5.8], [-3.0, 5.8], [-3.0, 5.4], [-2.2, 5.4], [-2.2, 3.0], [-1.8, 3.0], [-1.8, 1.4], [-2.2, 1.4], [-2.2, 0.6], [-2.6, 0.6], [-2.6, 0.2], [-3.0, 0.2], [-3.0, -1.0], [-3.8, -1.0], [-3.8, -1.4], [-5.0, -1.4], [-5.0, -0.6], [-5.4, -0.6], [-5.4, -0.2], [-5.8, -0.2], [-5.8, 4.6], [-5.0, 4.6], [-5.0, 5.4], [-4.5, 5.4]]"
+  turretSlot [
+    GPS {
+    }
+    Compass {
+    }
+  ]
 }
