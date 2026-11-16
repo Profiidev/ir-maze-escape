@@ -298,6 +298,50 @@ def block_xyz(r, what):
     return [round(cx(r.x) + T / 2 + (i + 0.5) * BLOCK, 4), round(cy(r.y) + T / 2 + (j + 0.5) * BLOCK, 4), r.z * LV]
 
 
+# EndermiteModel BODY_TEXS / BODY_SIZES (w, h, d) from the 26.3 client jar, head first
+ENDERMITE = (((0, 0), (4, 3, 2)), ((0, 5), (6, 4, 5)), ((0, 14), (3, 3, 1)), ((0, 18), (1, 2, 1)))
+
+
+def endermite_skin(px=0.015, front=0.058):
+    """Endermite look for the e-puck turret slot: one textured mesh, no bounding object, no mass, invisible to range rays.
+
+    Rebuilds EndermiteModel.createBodyLayer with ModelPart.Cube's vertex order and UVs (64x32 texture). Model -z (head)
+    becomes robot +x, model x robot y, model y (down, ground at 24) robot -z; 1 model pixel = px metres. The head front
+    sits at robot x = front so the head box encloses the camera (0.03 0 0.028): faces seen from inside are culled, so
+    the camera looks straight through it.
+    """
+    pts, uvs, idx = [], [], []
+    z = -3.5  # segment centres chain along z like createBodyLayer; the head front ends at z = -4.5
+    for i, ((u, v), (w, h, d)) in enumerate(ENDERMITE):
+        x0, x1, y0, y1, z0, z1 = -w / 2, w / 2, 24 - h, 24, z - d / 2, z + d / 2
+        c = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
+        faces = (  # (vertex order, u1, v1, u2, v2): DOWN, UP, WEST, NORTH, EAST, SOUTH
+            ((5, 4, 0, 1), u + d, v, u + d + w, v + d),
+            ((2, 3, 7, 6), u + d + w, v + d, u + d + 2 * w, v),
+            ((0, 4, 7, 3), u, v + d, u + d, v + d + h),
+            ((1, 0, 3, 2), u + d, v + d, u + d + w, v + d + h),
+            ((5, 1, 2, 6), u + d + w, v + d, u + 2 * d + w, v + d + h),
+            ((4, 5, 6, 7), u + 2 * d + w, v + d, u + 2 * d + 2 * w, v + d + h),
+        )
+        for order, u1, v1, u2, v2 in faces:
+            idx.append(" ".join(str(len(pts) + k) for k in range(4)) + " -1")
+            for k, (tu, tv) in zip(order, ((u2, v1), (u1, v1), (u1, v2), (u2, v2))):  # Polygon remap order
+                mx, my, mz = c[k]
+                pts.append(f"{front - (mz + 4.5) * px:.5f} {mx * px:.5f} {(24 - my) * px + 0.001:.5f}")
+                uvs.append(f"{tu / 64:.5f} {1 - tv / 32:.5f}")
+        if i < 3:
+            z += (d + ENDERMITE[i + 1][1][2]) / 2
+    return (
+        "    Pose {\n      translation 0.0095 0 -0.0486\n      children [\n        Shape {\n"  # turret slot -> robot frame
+        '          appearance PBRAppearance { baseColorMap ImageTexture { url ["textures/endermite.png"] filtering 0 } '
+        "roughness 1 metalness 0 }\n"
+        f"          geometry IndexedFaceSet {{\n            coord Coordinate {{ point [ {' '.join(pts)} ] }}\n"
+        f"            texCoord TextureCoordinate {{ point [ {' '.join(uvs)} ] }}\n"
+        f"            coordIndex [ {' '.join(idx)} ]\n          }}\n"
+        "          castShadows FALSE\n          isPickable FALSE\n        }\n      ]\n    }\n"
+    )
+
+
 def write_world(m, path):
     w = World(random.Random(f"{m.seed}:tex"))
     room_at = {c: r for r in m.rooms for c in r.cells()}
@@ -411,7 +455,9 @@ def write_world(m, path):
             else:
                 w.box(pos, size, w.wall_tex() if tex == "stone_bricks" else tex)
 
+    start = block_xyz(next(r for r in m.rooms if r.kind == "entrance"), "start")
     head = HEADER.read_text().split("WorldInfo")[0]
+    head = head.replace("EXTERNPROTO", 'EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"\nEXTERNPROTO', 1)
     info = f"IR Maze Escape: Minecraft stronghold, seed {m.seed}, {steps(m.path)} steps start to portal, {m.loops} loops."
     head += (
         f'WorldInfo {{\n  info [\n    "{info}"\n  ]\n  title "Stronghold Escape"\n}}\n'
@@ -419,10 +465,14 @@ def write_world(m, path):
         "TexturedBackground {\n}\nTexturedBackgroundLight {\n}\n"
         f"Floor {{\n  translation 0 0 -0.3\n  size {W * P * 2:.0f} {W * P * 2:.0f}\n}}\n"
     )
-    Path(path).write_text(head + "".join(w.out))
+    robot = (
+        f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  controller \"<none>\"\n  version \"2\"\n"
+        f"  turretSlot [\n{endermite_skin()}  ]\n}}\n"
+    )
+    Path(path).write_text(head + "".join(w.out) + robot)
     Path(path).with_suffix(".json").write_text(json.dumps({
         "seed": m.seed,
-        "start": block_xyz(next(r for r in m.rooms if r.kind == "entrance"), "start"),
+        "start": start,
         "goal": block_xyz(next(r for r in m.rooms if r.kind == "portal"), "goal"),
         "steps": steps(m.path),
         "loops": m.loops,
@@ -442,6 +492,8 @@ def extract_textures(out_dir, jar=JAR):
             (out_dir / f"{t}.png").write_bytes(z.read(f"{tex}block/{t}.png"))
         (out_dir / "end_portal.png").write_bytes(z.read(f"{tex}entity/end_portal/end_portal.png"))
         Image.open(BytesIO(z.read(f"{tex}block/lava_still.png"))).crop((0, 0, 16, 16)).save(out_dir / "lava.png")
+        # opaque palette PNG like the block textures: with alpha (or as 24-bit RGB) Webots draws the mesh without depth
+        Image.open(BytesIO(z.read(f"{tex}entity/endermite/endermite.png"))).convert("RGB").convert("P", palette=Image.ADAPTIVE).save(out_dir / "endermite.png")
 
 
 def preview(m, path):
