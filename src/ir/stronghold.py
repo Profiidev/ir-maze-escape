@@ -255,31 +255,90 @@ def axis_angle(phi, beta):
     return *ax, ang
 
 
+def rot_matrix(x, y, z, a):
+    """Rodrigues: axis-angle (unit axis) -> 3x3 rotation matrix."""
+    k = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+    return np.eye(3) + math.sin(a) * k + (1 - math.cos(a)) * k @ k
+
+
+def num(v):
+    return f"{v:.4f}".rstrip("0").rstrip(".")
+
+
+# box faces as in SolidBox.proto: corner signs (x, y, z) and the size axis giving u, v (3 = 0); 4 corners per face
+QUADS = [
+    (-1, 1, 1, 0, 2), (1, 1, 1, 3, 2), (1, 1, -1, 3, 3), (-1, 1, -1, 0, 3),
+    (-1, -1, -1, 3, 3), (1, -1, -1, 0, 3), (1, -1, 1, 0, 2), (-1, -1, 1, 3, 2),
+    (-1, -1, 1, 3, 0), (1, -1, 1, 3, 3), (1, 1, 1, 1, 3), (-1, 1, 1, 1, 0),
+    (1, -1, -1, 3, 0), (-1, -1, -1, 3, 3), (-1, 1, -1, 1, 3), (1, 1, -1, 1, 0),
+    (-1, -1, -1, 1, 3), (-1, -1, 1, 1, 2), (-1, 1, 1, 3, 2), (-1, 1, -1, 3, 3),
+    (1, -1, 1, 3, 2), (1, -1, -1, 3, 3), (1, 1, -1, 1, 3), (1, 1, 1, 1, 2),
+]
+
+
 class World:
+    """All box visuals merged into one Solid with one Shape per texture (few draw calls); colliders see colliders()."""
+
     def __init__(self, rng):
-        self.rng, self.out, self.n = rng, [], 0
+        self.rng, self.app, self.mesh, self.bounds = rng, {}, {}, []
 
     def box(self, pos, size, tex, rot=None, solid=True, glow=False):
-        self.n += 1
-        t = max(size) / 0.1  # SolidBox UV is metric: one tile per MC block
-        img = f'ImageTexture {{ url ["textures/{tex}.png"] filtering 0 }}'
-        if tex == "bars":
-            app = "PBRAppearance { baseColor 0.55 0.55 0.58 roughness 0.4 metalness 0.8 }"
-        else:
-            app = (
-                f"PBRAppearance {{ baseColorMap {img} "
-                + (f"emissiveColorMap {img} " if glow else "")
-                + f"textureTransform TextureTransform {{ scale {t:.3g} {t:.3g} }} roughness 1 metalness 0 }}"
-            )
-        r = f"  rotation {rot[0]:.5f} {rot[1]:.5f} {rot[2]:.5f} {rot[3]:.5f}\n" if rot else ""
-        self.out.append(
-            f'SolidBox {{\n  translation {pos[0]:.4f} {pos[1]:.4f} {pos[2]:.4f}\n{r}  name "{tex} {self.n}"\n'
-            f"  size {size[0]:.4f} {size[1]:.4f} {size[2]:.4f}\n  appearance {app}\n"
-            f"  enableBoundingObject {'TRUE' if solid else 'FALSE'}\n}}\n"
-        )
+        if tex not in self.app:
+            img = f'ImageTexture {{ url ["textures/{tex}.png"] filtering 0 }}'
+            if tex == "bars":
+                self.app[tex] = "PBRAppearance { baseColor 0.55 0.55 0.58 roughness 0.4 metalness 0.8 }"
+            else:
+                self.app[tex] = f"PBRAppearance {{ baseColorMap {img} " + (f"emissiveColorMap {img} " if glow else "") + "roughness 1 metalness 0 }"
+        r = rot_matrix(*rot) if rot else np.eye(3)
+        uv = (*size, 0)
+        corners = [np.asarray(pos) + r @ (np.array(c) * size / 2) for *c, _, _ in QUADS]
+        self.mesh.setdefault(tex, []).append((corners, [(uv[u] / BLOCK, uv[v] / BLOCK) for *_, u, v in QUADS]))  # one tile per MC block
+        if solid:
+            self.bounds.append((pos, rot, size))
 
     def wall_tex(self):
         return self.rng.choice(WALLS)
+
+    def wbt(self):
+        shapes = ""
+        for tex, boxes in self.mesh.items():
+            pts = "\n".join(" ".join(" ".join(map(num, p)) for p in c) for c, _ in boxes)
+            uvs = "\n".join(" ".join(f"{num(u)} {num(v)}" for u, v in t) for _, t in boxes)
+            idx = "\n".join(" ".join(f"{i} {i + 1} {i + 2} {i + 3} -1" for i in range(24 * b, 24 * b + 24, 4)) for b in range(len(boxes)))
+            shapes += (
+                f"    Shape {{\n      appearance {self.app[tex]}\n      geometry IndexedFaceSet {{\n"
+                f"        coord Coordinate {{ point [\n{pts}\n        ] }}\n"
+                f"        texCoord TextureCoordinate {{ point [\n{uvs}\n        ] }}\n"
+                f"        coordIndex [\n{idx}\n        ]\n      }}\n    }}\n"
+            )
+        bounds = "".join(
+            f'Solid {{ name "block {k}" translation {" ".join(map(num, p))} '
+            + (f"rotation {r[0]:.5f} {r[1]:.5f} {r[2]:.5f} {r[3]:.5f} " if r else "")
+            + f"boundingObject Box {{ size {' '.join(map(num, s))} }} }}\n"
+            for k, (p, r, s) in enumerate(self.colliders())
+        )
+        return f'Solid {{\n  name "stronghold"\n  children [\n{shapes}  ]\n}}\n' + bounds
+
+    def colliders(self):
+        """Collision for the robot only: floor slabs and the first block layer, merged into rectangles; parts starting
+        higher up never touch it and get none. Webots physics cost grows faster than the collider count (1408 single
+        blocks: ~10x real time), and one Solid with a Group boundingObject was slower still, hence separate Solids."""
+        grid, out = {}, []
+        for p, r, sz in self.bounds:
+            bot, top = p[2] - sz[2] / 2, p[2] + sz[2] / 2
+            z = math.floor((bot + 0.03) / LV)
+            if r:  # ramp parts keep their own box
+                out.append((p, r, sz))
+            elif top <= z * LV + 1e-3:
+                grid.setdefault(("floor", z), set()).update(raster(p, sz, (cx(0), cy(0)), P))
+            elif bot < z * LV + BLOCK / 2:
+                grid.setdefault(("wall", z), set()).update(raster(p, sz, (cx(0) - T / 2, cy(0) - T / 2), BLOCK))
+        for (kind, z), cells in grid.items():
+            (ox, oy), u = ((cx(0), cy(0)), P) if kind == "floor" else ((cx(0) - T / 2, cy(0) - T / 2), BLOCK)
+            z0, h = (z * LV - SLAB, SLAB) if kind == "floor" else (z * LV, WH)
+            for i0, i1, j0, j1 in rects(cells):
+                out.append(((ox + (i0 + i1) / 2 * u, oy + (j0 + j1) / 2 * u, z0 + h / 2), None, ((i1 - i0) * u, (j1 - j0) * u, h)))
+        return out
 
 
 def runs(vals, cap=None):
@@ -290,6 +349,25 @@ def runs(vals, cap=None):
             out[-1].append(v)
         else:
             out.append([v])
+    return out
+
+
+def raster(p, size, origin, unit):
+    """Grid cells (unit pitch from origin) under a box footprint; partly covered cells count."""
+    lo = [math.floor((p[k] - size[k] / 2 - origin[k]) / unit + 1e-6) for k in (0, 1)]
+    hi = [math.ceil((p[k] + size[k] / 2 - origin[k]) / unit - 1e-6) for k in (0, 1)]
+    return {(i, j) for i in range(lo[0], hi[0]) for j in range(lo[1], hi[1])}
+
+
+def rects(cells):
+    """Greedy rectangle cover of grid cells: row runs, grown down while the next row has the same run.
+    Returns (i0, i1, j0, j1), ends exclusive."""
+    out, grow = [], {}
+    for j in sorted({c[1] for c in cells}) + [None]:
+        row = [] if j is None else [(r[0], r[-1] + 1) for r in runs(i for i, jj in cells if jj == j)]
+        nxt = {r: (grow[r][0], j + 1) if r in grow and grow[r][1] == j else (j, j + 1) for r in row}
+        out += [(*r, *v) for r, v in grow.items() if nxt.get(r, (None,))[0] != v[0]]
+        grow = nxt
     return out
 
 
@@ -456,20 +534,21 @@ def write_world(m, path):
                 w.box(pos, size, w.wall_tex() if tex == "stone_bricks" else tex)
 
     start = block_xyz(next(r for r in m.rooms if r.kind == "entrance"), "start")
-    head = HEADER.read_text().split("WorldInfo")[0]
+    head = "".join(ln for ln in HEADER.read_text().split("WorldInfo")[0].splitlines(True) if "SolidBox" not in ln)
     head = head.replace("EXTERNPROTO", 'EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"\nEXTERNPROTO', 1)
     info = f"IR Maze Escape: Minecraft stronghold, seed {m.seed}, {steps(m.path)} steps start to portal, {m.loops} loops."
     head += (
         f'WorldInfo {{\n  info [\n    "{info}"\n  ]\n  title "Stronghold Escape"\n}}\n'
         f"Viewpoint {{\n  orientation -0.5773 0.5773 0.5773 2.0944\n  position 0 0 {W * P * 1.3:.1f}\n}}\n"
-        "TexturedBackground {\n}\nTexturedBackgroundLight {\n}\n"
+        # no shadows: stencil shadow volumes of every wall block made rendering crawl
+        "TexturedBackground {\n}\nTexturedBackgroundLight {\n  castShadows FALSE\n}\n"
         f"Floor {{\n  translation 0 0 -0.3\n  size {W * P * 2:.0f} {W * P * 2:.0f}\n}}\n"
     )
     robot = (
         f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  controller \"<none>\"\n  version \"2\"\n"
         f"  turretSlot [\n{endermite_skin()}  ]\n}}\n"
     )
-    Path(path).write_text(head + "".join(w.out) + robot)
+    Path(path).write_text(head + w.wbt() + robot)
     Path(path).with_suffix(".json").write_text(json.dumps({
         "seed": m.seed,
         "start": start,
