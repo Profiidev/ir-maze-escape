@@ -23,7 +23,7 @@ camera = robot.getDevice("camera")
 encoders = [robot.getDevice(n) for n in ("left wheel sensor", "right wheel sensor")]
 motors = [robot.getDevice(n) for n in ("left wheel motor", "right wheel motor")]
 rays = {(k, j): robot.getDevice(f"d{k}_{j}") for k in range(4) for j in range(3)}
-for dev in [compass, camera, *encoders, *rays.values()]:
+for dev in [compass, *encoders, *rays.values()]:
     dev.enable(dt)
 for m in motors:
     m.setPosition(float("inf"))
@@ -94,7 +94,10 @@ def step_cell(h):
 
 
 def sees_portal():
+    camera.enable(dt)  # on only for this one frame: an enabled camera re-renders the whole scene every step
+    tick()
     img = camera.getImage()
+    camera.disable()
     n = sum(1 for i in range(0, len(img), 4) if img[i + 1] > 180 and img[i + 2] < 110 and img[i + 1] - img[i] > 60)
     return n >= BEACON_PIXELS and ray(h, h, 0) < 0.30
 
