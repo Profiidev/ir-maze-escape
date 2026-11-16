@@ -20,7 +20,25 @@ def test_world_stable(tmp_path):
     out = [tmp_path / f"{i}.wbt" for i in range(2)]
     for o in out:
         s.write_world(s.build(3), o)
-    assert out[0].read_text() == out[1].read_text()
+    text = out[0].read_text()
+    assert text == out[1].read_text()
+    assert "SolidBox" not in text and "castShadows FALSE" in text
+    assert text.count("Shape {") <= len(s.TEXTURES) + 4  # one per texture (+ end_portal, lava, beacon, bars)
+
+
+def test_rects_cover_cells_exactly():
+    import random
+
+    rng = random.Random(0)
+    for _ in range(50):
+        cells = {(rng.randrange(8), rng.randrange(8)) for _ in range(rng.randrange(1, 40))}
+        got = [(i, j) for i0, i1, j0, j1 in s.rects(cells) for i in range(i0, i1) for j in range(j0, j1)]
+        assert sorted(got) == sorted(cells)  # covers all, no overlap, nothing extra
+
+
+def test_rot_matrix_matches_axis_angle():
+    b = 0.3
+    assert (abs(s.rot_matrix(*s.axis_angle(0, b)) @ [1, 0, 0] - [math.cos(b), 0, -math.sin(b)]) < 1e-9).all()
 
 
 def test_pieces_fit_and_doors_align():
