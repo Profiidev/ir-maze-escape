@@ -285,7 +285,9 @@ class World:
     def box(self, pos, size, tex, rot=None, solid=True, glow=False):
         if tex not in self.app:
             img = f'ImageTexture {{ url ["textures/{tex}.png"] filtering 0 }}'
-            if tex == "bars":
+            if tex == "beacon":
+                self.app[tex] = "PBRAppearance { baseColor 0.1 1 0.4 emissiveColor 0.1 1 0.4 roughness 1 metalness 0 }"
+            elif tex == "bars":
                 self.app[tex] = "PBRAppearance { baseColor 0.55 0.55 0.58 roughness 0.4 metalness 0.8 }"
             else:
                 self.app[tex] = f"PBRAppearance {{ baseColorMap {img} " + (f"emissiveColorMap {img} " if glow else "") + "roughness 1 metalness 0 }"
@@ -541,14 +543,26 @@ def write_world(m, path):
     info = f"IR Maze Escape: Minecraft stronghold, seed {m.seed}, {steps(m.path)} steps start to portal, {m.loops} loops."
     head += (
         f'WorldInfo {{\n  info [\n    "{info}"\n  ]\n  title "Stronghold Escape"\n}}\n'
-        f"Viewpoint {{\n  orientation -0.5773 0.5773 0.5773 2.0944\n  position 0 0 {W * P * 1.3:.1f}\n}}\n"
+        f"Viewpoint {{\n  orientation -0.5773 0.5773 0.5773 2.0944\n  position {start[0]} {start[1]} 1\n"
+        '  follow "e-puck"\n  followType "Tracking Shot"\n}\n'
         # no shadows: stencil shadow volumes of every wall block made rendering crawl
         "TexturedBackground {\n}\nTexturedBackgroundLight {\n  castShadows FALSE\n}\n"
         f"Floor {{\n  translation 0 0 -0.3\n  size {W * P * 2:.0f} {W * P * 2:.0f}\n}}\n"
     )
+    # sensors only: compass, wheel encoders, camera (tilted up to see the portal beacon) and 4 x 3 parallel range rays
+    rays = ""
+    for k in range(4):
+        a = k * math.pi / 2
+        for j, off in enumerate((0, -0.04, 0.04)):
+            x, y = 0.03 * math.cos(a) - off * math.sin(a), 0.03 * math.sin(a) + off * math.cos(a)
+            rays += (
+                f'    DistanceSensor {{\n      name "d{k}_{j}"\n      translation {x:.4f} {y:.4f} 0.03\n'
+                f"      rotation 0 0 1 {a:.5f}\n      lookupTable [0 0 0, 0.8 0.8 0]\n    }}\n"
+            )
     robot = (
-        f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  controller \"<none>\"\n  version \"2\"\n"
-        f"  turretSlot [\n{endermite_skin()}  ]\n}}\n"
+        f"E-puck {{\n  translation {start[0]} {start[1]} 0\n  controller \"maze_solver\"\n  version \"2\"\n"
+        "  camera_width 104\n  camera_height 80\n  camera_fieldOfView 1.2\n  camera_rotation 0 1 0 -0.45\n"
+        f"  turretSlot [\n{endermite_skin()}    Compass {{\n    }}\n{rays}  ]\n}}\n"
     )
     Path(path).write_text(head + w.wbt() + robot)
     Path(path).with_suffix(".json").write_text(json.dumps({
