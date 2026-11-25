@@ -4,6 +4,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/solids/protos/SolidBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/gctronic/e-puck/protos/E-puck.proto"
 
 WorldInfo {
   info [
@@ -12,8 +13,31 @@ WorldInfo {
   title "Maze Escape"
 }
 Viewpoint {
-  orientation -0.5773 0.5773 0.5773 2.0944
-  position 0 0 4.2
+  orientation -0.3401035479200525 -0.10785778601344008 0.9341821421374268 3.7176437241740734
+  position -0.6479175298757992 1.0181400836437324 0.33693495837301685
+}
+E-puck {
+  translation -0.91 0.87 4.08272e-06
+  rotation -2.3463999999870816e-06 -2.3463999999870816e-06 0.9999999999944944 -1.5707953071795862
+  controller "maze_solver"
+  turretSlot [
+    DistanceSensor {
+      name "distance sensor(1)"
+      lookupTable [
+        0 0 0
+        0.1 0.1 0.01
+        2 2 0.01
+      ]
+    }
+    DistanceSensor {
+      rotation 0 0 1 -1.57
+      lookupTable [
+        0 0 0
+        0.1 0.1 0.01
+        2 2 0.01
+      ]
+    }
+  ]
 }
 TexturedBackground {
 }
